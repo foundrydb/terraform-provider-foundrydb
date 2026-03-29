@@ -1,0 +1,25 @@
+# Compiled binaries
+terraform-provider-foundrydb
+terraform-provider-foundrydb_*
+
+# Terraform working directories
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Go build artifacts
+*.exe
+*.test
+*.out
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
