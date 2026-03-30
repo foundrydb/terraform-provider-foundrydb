@@ -40,7 +40,7 @@ func (p *foundrydbProvider) Metadata(_ context.Context, _ provider.MetadataReque
 
 func (p *foundrydbProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Terraform provider for the FoundryDB managed database platform. Manage PostgreSQL, MySQL, MongoDB, Valkey, and Kafka clusters on UpCloud infrastructure.",
+		MarkdownDescription: "Terraform provider for the FoundryDB managed database platform. Manage PostgreSQL, MySQL, MongoDB, Valkey, Kafka, OpenSearch, and MSSQL clusters on UpCloud infrastructure.",
 		Attributes: map[string]schema.Attribute{
 			"api_url": schema.StringAttribute{
 				MarkdownDescription: "Base URL of the FoundryDB controller API. Defaults to `https://api.foundrydb.com`.",
@@ -86,5 +86,6 @@ func (p *foundrydbProvider) Resources(_ context.Context) []func() resource.Resou
 func (p *foundrydbProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewDatabaseUserDataSource,
+		NewOrganizationsDataSource,
 	}
 }

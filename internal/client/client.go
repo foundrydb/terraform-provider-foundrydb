@@ -30,7 +30,8 @@ func New(apiURL, username, password string) *Client {
 	}
 }
 
-func (c *Client) doRequest(method, path string, body interface{}) (*http.Response, error) {
+// doRequest performs an HTTP request with optional org scoping via X-Active-Org-ID header.
+func (c *Client) doRequest(method, path string, body interface{}, orgID string) (*http.Response, error) {
 	var reqBody io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -50,6 +51,9 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
+	if orgID != "" {
+		req.Header.Set("X-Active-Org-ID", orgID)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -64,8 +68,8 @@ func readBody(resp *http.Response) ([]byte, error) {
 }
 
 // CreateService creates a new managed database service.
-func (c *Client) CreateService(req ServiceCreateRequest) (*Service, error) {
-	resp, err := c.doRequest(http.MethodPost, "/managed-services/", req)
+func (c *Client) CreateService(req ServiceCreateRequest, orgID string) (*Service, error) {
+	resp, err := c.doRequest(http.MethodPost, "/managed-services/", req, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +88,8 @@ func (c *Client) CreateService(req ServiceCreateRequest) (*Service, error) {
 }
 
 // GetService retrieves a managed database service by ID.
-func (c *Client) GetService(id string) (*Service, error) {
-	resp, err := c.doRequest(http.MethodGet, "/managed-services/"+id, nil)
+func (c *Client) GetService(id string, orgID string) (*Service, error) {
+	resp, err := c.doRequest(http.MethodGet, "/managed-services/"+id, nil, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +111,8 @@ func (c *Client) GetService(id string) (*Service, error) {
 }
 
 // UpdateService updates a managed database service.
-func (c *Client) UpdateService(id string, req ServiceUpdateRequest) (*Service, error) {
-	resp, err := c.doRequest(http.MethodPatch, "/managed-services/"+id, req)
+func (c *Client) UpdateService(id string, req ServiceUpdateRequest, orgID string) (*Service, error) {
+	resp, err := c.doRequest(http.MethodPatch, "/managed-services/"+id, req, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +131,8 @@ func (c *Client) UpdateService(id string, req ServiceUpdateRequest) (*Service, e
 }
 
 // DeleteService deletes a managed database service.
-func (c *Client) DeleteService(id string) error {
-	resp, err := c.doRequest(http.MethodDelete, "/managed-services/"+id, nil)
+func (c *Client) DeleteService(id string, orgID string) error {
+	resp, err := c.doRequest(http.MethodDelete, "/managed-services/"+id, nil, orgID)
 	if err != nil {
 		return err
 	}
@@ -147,10 +151,10 @@ func (c *Client) DeleteService(id string) error {
 
 // WaitForServiceRunning polls until the service reaches "running" status or the
 // timeout is exceeded. Polling interval is 10 seconds; timeout is 15 minutes.
-func (c *Client) WaitForServiceRunning(id string) (*Service, error) {
+func (c *Client) WaitForServiceRunning(id string, orgID string) (*Service, error) {
 	deadline := time.Now().Add(15 * time.Minute)
 	for time.Now().Before(deadline) {
-		svc, err := c.GetService(id)
+		svc, err := c.GetService(id, orgID)
 		if err != nil {
 			return nil, fmt.Errorf("error polling service status: %w", err)
 		}
@@ -172,7 +176,7 @@ func (c *Client) WaitForServiceRunning(id string) (*Service, error) {
 // RevealDatabaseUserPassword fetches the credentials for a database user.
 func (c *Client) RevealDatabaseUserPassword(serviceID, username string) (*DatabaseUser, error) {
 	path := fmt.Sprintf("/managed-services/%s/database-users/%s/reveal-password", serviceID, username)
-	resp, err := c.doRequest(http.MethodPost, path, nil)
+	resp, err := c.doRequest(http.MethodPost, path, nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -188,4 +192,24 @@ func (c *Client) RevealDatabaseUserPassword(serviceID, username string) (*Databa
 		return nil, fmt.Errorf("failed to decode user response: %w", err)
 	}
 	return &user, nil
+}
+
+// ListOrganizations retrieves all organizations the authenticated user belongs to.
+func (c *Client) ListOrganizations() ([]Organization, error) {
+	resp, err := c.doRequest(http.MethodGet, "/organizations", nil, "")
+	if err != nil {
+		return nil, err
+	}
+	data, err := readBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("list organizations returned status %d: %s", resp.StatusCode, string(data))
+	}
+	var result ListOrganizationsResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode organizations response: %w", err)
+	}
+	return result.Organizations, nil
 }

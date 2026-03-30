@@ -1,6 +1,6 @@
 # Terraform Provider for FoundryDB
 
-Manage [FoundryDB](https://foundrydb.com) managed database clusters with Terraform. This provider supports PostgreSQL, MySQL, MongoDB, Valkey, and Kafka running on UpCloud infrastructure.
+Manage [FoundryDB](https://foundrydb.com) managed database clusters with Terraform. This provider supports PostgreSQL, MySQL, MongoDB, Valkey, Kafka, OpenSearch, and MSSQL running on UpCloud infrastructure.
 
 ## Requirements
 
@@ -83,13 +83,14 @@ resource "foundrydb_service" "postgres" {
 | Argument | Type | Required | Forces Replace | Description |
 |----------|------|----------|----------------|-------------|
 | `name` | string | Yes | No | Human-readable service name. |
-| `database_type` | string | Yes | Yes | Engine: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`. |
-| `version` | string | No | Yes | Engine version, e.g. `17` for PostgreSQL 17. |
+| `database_type` | string | Yes | Yes | Engine: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`, `opensearch`, `mssql`. |
+| `version` | string | No | Yes | Engine version (see [Supported Versions](#supported-versions)). |
 | `plan_name` | string | Yes | Yes | Compute tier: `tier-1` to `tier-15`. |
 | `zone` | string | No | Yes | UpCloud zone. Default: `se-sto1` (Stockholm). |
 | `storage_size_gb` | number | No | Yes | Data disk size in GB. |
 | `storage_tier` | string | No | Yes | `maxiops` (NVMe SSD, production) or `standard` (HDD, development). |
 | `allowed_cidrs` | list(string) | No | No | CIDR blocks allowed to connect to the service. |
+| `organization_id` | string | No | Yes | Organization ID to scope this service to. When set, all API calls for this resource include the `X-Active-Org-ID` header. Use with the `foundrydb_organizations` data source to look up org IDs. |
 
 #### Computed Attributes
 
@@ -98,6 +99,18 @@ resource "foundrydb_service" "postgres" {
 | `id` | UUID of the service. |
 | `status` | Current lifecycle status (e.g. `running`). |
 | `created_at` | RFC3339 creation timestamp. |
+
+#### Supported Versions
+
+| Engine | Supported Versions |
+|--------|-------------------|
+| `postgresql` | `14`, `15`, `16`, `17`, `18` |
+| `mysql` | `8.4` |
+| `mongodb` | `6.0`, `7.0`, `8.0` |
+| `valkey` | `7.2`, `8.0`, `8.1`, `9.0` |
+| `kafka` | `3.6`, `3.7`, `3.8`, `3.9`, `4.0` |
+| `opensearch` | `2.19` |
+| `mssql` | `4.8` |
 
 #### Compute Tiers
 
@@ -159,6 +172,32 @@ output "connection_string" {
 | `port` | No | Port number. |
 | `database` | No | Default database name. |
 | `connection_string` | Yes | Full connection string for a database driver. |
+
+### `foundrydb_organizations`
+
+Lists all organizations the authenticated user belongs to. Use the returned `id` values as the `organization_id` argument on `foundrydb_service` resources to scope them to a specific organization.
+
+#### Example
+
+```hcl
+data "foundrydb_organizations" "all" {}
+
+output "org_ids" {
+  value = { for o in data.foundrydb_organizations.all.organizations : o.name => o.id }
+}
+```
+
+#### Computed Attributes
+
+The data source exposes an `organizations` list. Each entry contains:
+
+| Attribute | Description |
+|-----------|-------------|
+| `id` | Unique identifier of the organization. |
+| `name` | Display name. |
+| `slug` | URL-friendly slug. |
+| `role` | The authenticated user's role (e.g. `owner`, `member`). |
+| `created_at` | RFC3339 creation timestamp. |
 
 ## Complete Examples
 
@@ -226,7 +265,7 @@ resource "foundrydb_service" "mysql" {
 resource "foundrydb_service" "mongo" {
   name            = "prod-mongo"
   database_type   = "mongodb"
-  version         = "7"
+  version         = "8.0"
   plan_name       = "tier-4"
   zone            = "se-sto1"
   storage_size_gb = 200
@@ -241,7 +280,7 @@ resource "foundrydb_service" "mongo" {
 resource "foundrydb_service" "valkey" {
   name            = "prod-cache"
   database_type   = "valkey"
-  version         = "8"
+  version         = "8.1"
   plan_name       = "tier-2"
   zone            = "se-sto1"
   storage_size_gb = 20
@@ -262,6 +301,58 @@ resource "foundrydb_service" "kafka" {
   storage_size_gb = 500
   storage_tier    = "maxiops"
   allowed_cidrs   = ["10.0.0.0/8"]
+}
+```
+
+### OpenSearch
+
+```hcl
+resource "foundrydb_service" "opensearch" {
+  name            = "prod-opensearch"
+  database_type   = "opensearch"
+  version         = "2.19"
+  plan_name       = "tier-4"
+  zone            = "se-sto1"
+  storage_size_gb = 200
+  storage_tier    = "maxiops"
+  allowed_cidrs   = ["10.0.0.0/8"]
+}
+```
+
+### MSSQL
+
+```hcl
+resource "foundrydb_service" "mssql" {
+  name            = "prod-mssql"
+  database_type   = "mssql"
+  version         = "4.8"
+  plan_name       = "tier-4"
+  zone            = "se-sto1"
+  storage_size_gb = 100
+  storage_tier    = "maxiops"
+  allowed_cidrs   = ["10.0.0.0/8"]
+}
+```
+
+### Organization-Scoped Service
+
+Use `foundrydb_organizations` to look up available org IDs and scope a service to a specific organization:
+
+```hcl
+data "foundrydb_organizations" "all" {}
+
+resource "foundrydb_service" "org_postgres" {
+  name            = "org-prod-pg"
+  database_type   = "postgresql"
+  version         = "17"
+  plan_name       = "tier-2"
+  zone            = "se-sto1"
+  storage_size_gb = 50
+  storage_tier    = "maxiops"
+  allowed_cidrs   = ["0.0.0.0/0"]
+
+  # All API calls for this resource will include X-Active-Org-ID header.
+  organization_id = data.foundrydb_organizations.all.organizations[0].id
 }
 ```
 

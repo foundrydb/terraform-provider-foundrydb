@@ -29,17 +29,18 @@ type serviceResource struct {
 
 // serviceResourceModel holds the Terraform state for a foundrydb_service.
 type serviceResourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	Name          types.String `tfsdk:"name"`
-	DatabaseType  types.String `tfsdk:"database_type"`
-	Version       types.String `tfsdk:"version"`
-	PlanName      types.String `tfsdk:"plan_name"`
-	Zone          types.String `tfsdk:"zone"`
-	StorageSizeGB types.Int64  `tfsdk:"storage_size_gb"`
-	StorageTier   types.String `tfsdk:"storage_tier"`
-	AllowedCIDRs  types.List   `tfsdk:"allowed_cidrs"`
-	Status        types.String `tfsdk:"status"`
-	CreatedAt     types.String `tfsdk:"created_at"`
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	DatabaseType   types.String `tfsdk:"database_type"`
+	Version        types.String `tfsdk:"version"`
+	PlanName       types.String `tfsdk:"plan_name"`
+	Zone           types.String `tfsdk:"zone"`
+	StorageSizeGB  types.Int64  `tfsdk:"storage_size_gb"`
+	StorageTier    types.String `tfsdk:"storage_tier"`
+	AllowedCIDRs   types.List   `tfsdk:"allowed_cidrs"`
+	OrganizationID types.String `tfsdk:"organization_id"`
+	Status         types.String `tfsdk:"status"`
+	CreatedAt      types.String `tfsdk:"created_at"`
 }
 
 // NewServiceResource returns a new serviceResource factory.
@@ -53,7 +54,7 @@ func (r *serviceResource) Metadata(_ context.Context, req resource.MetadataReque
 
 func (r *serviceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a FoundryDB managed database service. Supports PostgreSQL, MySQL, MongoDB, Valkey, and Kafka. After creation, the provider waits up to 15 minutes for the service to reach `running` status.",
+		MarkdownDescription: "Manages a FoundryDB managed database service. Supports PostgreSQL, MySQL, MongoDB, Valkey, Kafka, OpenSearch, and MSSQL. After creation, the provider waits up to 15 minutes for the service to reach `running` status.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier (UUID) of the service.",
@@ -67,14 +68,14 @@ func (r *serviceResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Required:            true,
 			},
 			"database_type": schema.StringAttribute{
-				MarkdownDescription: "Database engine. One of: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`.",
+				MarkdownDescription: "Database engine. One of: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`, `opensearch`, `mssql`.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"version": schema.StringAttribute{
-				MarkdownDescription: "Database engine version (e.g. `17` for PostgreSQL 17).",
+				MarkdownDescription: "Database engine version. Examples: `17` (PostgreSQL), `8.4` (MySQL), `8.0` (MongoDB), `8.1` (Valkey), `3.9` (Kafka), `2.19` (OpenSearch), `4.8` (MSSQL).",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -121,6 +122,13 @@ func (r *serviceResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					listplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"organization_id": schema.StringAttribute{
+				MarkdownDescription: "Optional organization ID to scope this service to. When set, all API calls for this resource include the `X-Active-Org-ID` header with the specified value.",
+				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Current lifecycle status of the service (e.g. `running`, `provisioning`).",
 				Computed:            true,
@@ -159,6 +167,11 @@ func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	orgID := ""
+	if !plan.OrganizationID.IsNull() && !plan.OrganizationID.IsUnknown() {
+		orgID = plan.OrganizationID.ValueString()
+	}
+
 	createReq := client.ServiceCreateRequest{
 		Name:         plan.Name.ValueString(),
 		DatabaseType: plan.DatabaseType.ValueString(),
@@ -187,14 +200,14 @@ func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest
 		createReq.AllowedCIDRs = cidrs
 	}
 
-	svc, err := r.client.CreateService(createReq)
+	svc, err := r.client.CreateService(createReq, orgID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating service", err.Error())
 		return
 	}
 
 	// Wait for the service to reach running status before returning.
-	svc, err = r.client.WaitForServiceRunning(svc.ID)
+	svc, err = r.client.WaitForServiceRunning(svc.ID, orgID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error waiting for service to become running", err.Error())
 		return
@@ -215,7 +228,12 @@ func (r *serviceResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	svc, err := r.client.GetService(state.ID.ValueString())
+	orgID := ""
+	if !state.OrganizationID.IsNull() && !state.OrganizationID.IsUnknown() {
+		orgID = state.OrganizationID.ValueString()
+	}
+
+	svc, err := r.client.GetService(state.ID.ValueString(), orgID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading service", err.Error())
 		return
@@ -248,6 +266,11 @@ func (r *serviceResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	orgID := ""
+	if !state.OrganizationID.IsNull() && !state.OrganizationID.IsUnknown() {
+		orgID = state.OrganizationID.ValueString()
+	}
+
 	updateReq := client.ServiceUpdateRequest{}
 
 	if !plan.Name.Equal(state.Name) {
@@ -265,7 +288,7 @@ func (r *serviceResource) Update(ctx context.Context, req resource.UpdateRequest
 		updateReq.AllowedCIDRs = cidrs
 	}
 
-	svc, err := r.client.UpdateService(state.ID.ValueString(), updateReq)
+	svc, err := r.client.UpdateService(state.ID.ValueString(), updateReq, orgID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating service", err.Error())
 		return
@@ -286,7 +309,12 @@ func (r *serviceResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if err := r.client.DeleteService(state.ID.ValueString()); err != nil {
+	orgID := ""
+	if !state.OrganizationID.IsNull() && !state.OrganizationID.IsUnknown() {
+		orgID = state.OrganizationID.ValueString()
+	}
+
+	if err := r.client.DeleteService(state.ID.ValueString(), orgID); err != nil {
 		resp.Diagnostics.AddError("Error deleting service", err.Error())
 	}
 }
@@ -318,6 +346,7 @@ func serviceToState(_ context.Context, svc *client.Service, model *serviceResour
 	model.StorageTier = types.StringValue(svc.StorageTier)
 	model.Status = types.StringValue(svc.Status)
 	model.CreatedAt = types.StringValue(svc.CreatedAt)
+	// organization_id is not returned by the API; preserve whatever was set in state/plan.
 
 	cidrElems := make([]attr.Value, len(svc.AllowedCIDRs))
 	for i, c := range svc.AllowedCIDRs {

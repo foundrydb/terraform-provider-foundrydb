@@ -47,3 +47,17 @@ type DatabaseUser struct {
 	Database         string `json:"database"`
 	ConnectionString string `json:"connection_string"`
 }
+
+// Organization represents an organization the authenticated user belongs to.
+type Organization struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Role        string `json:"role"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// ListOrganizationsResponse is the response body for GET /organizations
+type ListOrganizationsResponse struct {
+	Organizations []Organization `json:"organizations"`
+}
