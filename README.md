@@ -109,7 +109,7 @@ resource "foundrydb_service" "postgres" {
 | `mongodb` | `6.0`, `7.0`, `8.0` |
 | `valkey` | `7.2`, `8.0`, `8.1`, `9.0` |
 | `kafka` | `3.6`, `3.7`, `3.8`, `3.9`, `4.0` |
-| `opensearch` | `2.19` |
+| `opensearch: 2` |
 | `mssql` | `4.8` |
 
 #### Compute Tiers
@@ -310,7 +310,7 @@ resource "foundrydb_service" "kafka" {
 resource "foundrydb_service" "opensearch" {
   name            = "prod-opensearch"
   database_type   = "opensearch"
-  version         = "2.19"
+  version         = "2"
   plan_name       = "tier-4"
   zone            = "se-sto1"
   storage_size_gb = 200
