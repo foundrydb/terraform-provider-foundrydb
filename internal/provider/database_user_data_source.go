@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/anorph/terraform-provider-foundrydb/internal/client"
+	"github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -15,7 +15,7 @@ var _ datasource.DataSource = &databaseUserDataSource{}
 
 // databaseUserDataSource implements the foundrydb_database_user data source.
 type databaseUserDataSource struct {
-	client *client.Client
+	client *foundrydb.Client
 }
 
 // databaseUserDataSourceModel holds the Terraform state for foundrydb_database_user.
@@ -80,11 +80,11 @@ func (d *databaseUserDataSource) Configure(_ context.Context, req datasource.Con
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*client.Client)
+	c, ok := req.ProviderData.(*foundrydb.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected data source configure type",
-			fmt.Sprintf("Expected *client.Client, got %T", req.ProviderData),
+			fmt.Sprintf("Expected *foundrydb.Client, got %T", req.ProviderData),
 		)
 		return
 	}
@@ -99,7 +99,8 @@ func (d *databaseUserDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	user, err := d.client.RevealDatabaseUserPassword(
+	creds, err := d.client.RevealPassword(
+		ctx,
 		state.ServiceID.ValueString(),
 		state.Username.ValueString(),
 	)
@@ -112,11 +113,11 @@ func (d *databaseUserDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	state.Password = types.StringValue(user.Password)
-	state.Host = types.StringValue(user.Host)
-	state.Port = types.Int64Value(user.Port)
-	state.Database = types.StringValue(user.Database)
-	state.ConnectionString = types.StringValue(user.ConnectionString)
+	state.Password = types.StringValue(creds.Password)
+	state.Host = types.StringValue(creds.Host)
+	state.Port = types.Int64Value(creds.Port)
+	state.Database = types.StringValue(creds.Database)
+	state.ConnectionString = types.StringValue(creds.ConnectionString)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

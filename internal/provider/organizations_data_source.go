@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/anorph/terraform-provider-foundrydb/internal/client"
+	"github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -16,7 +16,7 @@ var _ datasource.DataSource = &organizationsDataSource{}
 
 // organizationsDataSource implements the foundrydb_organizations data source.
 type organizationsDataSource struct {
-	client *client.Client
+	client *foundrydb.Client
 }
 
 // organizationModel represents a single organization in Terraform state.
@@ -91,11 +91,11 @@ func (d *organizationsDataSource) Configure(_ context.Context, req datasource.Co
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*client.Client)
+	c, ok := req.ProviderData.(*foundrydb.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected data source configure type",
-			fmt.Sprintf("Expected *client.Client, got %T", req.ProviderData),
+			fmt.Sprintf("Expected *foundrydb.Client, got %T", req.ProviderData),
 		)
 		return
 	}
@@ -110,7 +110,7 @@ func (d *organizationsDataSource) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
-	orgs, err := d.client.ListOrganizations()
+	orgs, err := d.client.ListOrganizations(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error listing organizations",

@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/anorph/terraform-provider-foundrydb/internal/client"
+	"github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -72,7 +72,11 @@ func (p *foundrydbProvider) Configure(ctx context.Context, req provider.Configur
 		apiURL = config.APIURL.ValueString()
 	}
 
-	c := client.New(apiURL, config.Username.ValueString(), config.Password.ValueString())
+	c := foundrydb.New(foundrydb.Config{
+		APIURL:   apiURL,
+		Username: config.Username.ValueString(),
+		Password: config.Password.ValueString(),
+	})
 	resp.DataSourceData = c
 	resp.ResourceData = c
 }

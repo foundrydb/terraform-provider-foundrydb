@@ -3,17 +3,18 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/anorph/terraform-provider-foundrydb/internal/client"
+	"github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -24,7 +25,7 @@ var _ resource.ResourceWithImportState = &serviceResource{}
 
 // serviceResource implements the foundrydb_service resource.
 type serviceResource struct {
-	client *client.Client
+	client *foundrydb.Client
 }
 
 // serviceResourceModel holds the Terraform state for a foundrydb_service.
@@ -75,7 +76,7 @@ func (r *serviceResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"version": schema.StringAttribute{
-				MarkdownDescription: "Database engine version. Examples: `17` (PostgreSQL), `8.4` (MySQL), `8.0` (MongoDB), `8.1` (Valkey), `3.9` (Kafka), `2` (OpenSearch), `4.8` (MSSQL).",
+				MarkdownDescription: "Database engine version. Examples: `17` (PostgreSQL), `8.4` (MySQL), `8.0` (MongoDB), `8.1` (Valkey), `3.9` (Kafka), `2.19` (OpenSearch), `4.8` (MSSQL).",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -148,11 +149,11 @@ func (r *serviceResource) Configure(_ context.Context, req resource.ConfigureReq
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*client.Client)
+	c, ok := req.ProviderData.(*foundrydb.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected resource configure type",
-			fmt.Sprintf("Expected *client.Client, got %T", req.ProviderData),
+			fmt.Sprintf("Expected *foundrydb.Client, got %T", req.ProviderData),
 		)
 		return
 	}
@@ -167,14 +168,9 @@ func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	orgID := ""
-	if !plan.OrganizationID.IsNull() && !plan.OrganizationID.IsUnknown() {
-		orgID = plan.OrganizationID.ValueString()
-	}
-
-	createReq := client.ServiceCreateRequest{
+	createReq := foundrydb.CreateServiceRequest{
 		Name:         plan.Name.ValueString(),
-		DatabaseType: plan.DatabaseType.ValueString(),
+		DatabaseType: foundrydb.DatabaseType(plan.DatabaseType.ValueString()),
 		PlanName:     plan.PlanName.ValueString(),
 	}
 	if !plan.Version.IsNull() && !plan.Version.IsUnknown() {
@@ -184,7 +180,7 @@ func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest
 		createReq.Zone = plan.Zone.ValueString()
 	}
 	if !plan.StorageSizeGB.IsNull() && !plan.StorageSizeGB.IsUnknown() {
-		size := plan.StorageSizeGB.ValueInt64()
+		size := int(plan.StorageSizeGB.ValueInt64())
 		createReq.StorageSizeGB = &size
 	}
 	if !plan.StorageTier.IsNull() && !plan.StorageTier.IsUnknown() {
@@ -200,14 +196,14 @@ func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest
 		createReq.AllowedCIDRs = cidrs
 	}
 
-	svc, err := r.client.CreateService(createReq, orgID)
+	svc, err := r.client.CreateService(ctx, createReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating service", err.Error())
 		return
 	}
 
 	// Wait for the service to reach running status before returning.
-	svc, err = r.client.WaitForServiceRunning(svc.ID, orgID)
+	svc, err = r.client.WaitForRunning(ctx, svc.ID, 15*time.Minute)
 	if err != nil {
 		resp.Diagnostics.AddError("Error waiting for service to become running", err.Error())
 		return
@@ -228,12 +224,7 @@ func (r *serviceResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	orgID := ""
-	if !state.OrganizationID.IsNull() && !state.OrganizationID.IsUnknown() {
-		orgID = state.OrganizationID.ValueString()
-	}
-
-	svc, err := r.client.GetService(state.ID.ValueString(), orgID)
+	svc, err := r.client.GetService(ctx, state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading service", err.Error())
 		return
@@ -266,12 +257,7 @@ func (r *serviceResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	orgID := ""
-	if !state.OrganizationID.IsNull() && !state.OrganizationID.IsUnknown() {
-		orgID = state.OrganizationID.ValueString()
-	}
-
-	updateReq := client.ServiceUpdateRequest{}
+	updateReq := foundrydb.UpdateServiceRequest{}
 
 	if !plan.Name.Equal(state.Name) {
 		name := plan.Name.ValueString()
@@ -288,7 +274,7 @@ func (r *serviceResource) Update(ctx context.Context, req resource.UpdateRequest
 		updateReq.AllowedCIDRs = cidrs
 	}
 
-	svc, err := r.client.UpdateService(state.ID.ValueString(), updateReq, orgID)
+	svc, err := r.client.UpdateService(ctx, state.ID.ValueString(), updateReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating service", err.Error())
 		return
@@ -309,12 +295,7 @@ func (r *serviceResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	orgID := ""
-	if !state.OrganizationID.IsNull() && !state.OrganizationID.IsUnknown() {
-		orgID = state.OrganizationID.ValueString()
-	}
-
-	if err := r.client.DeleteService(state.ID.ValueString(), orgID); err != nil {
+	if err := r.client.DeleteService(ctx, state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error deleting service", err.Error())
 	}
 }
@@ -335,16 +316,16 @@ func (r *serviceResource) ImportState(ctx context.Context, req resource.ImportSt
 }
 
 // serviceToState maps an API Service into a Terraform state model.
-func serviceToState(_ context.Context, svc *client.Service, model *serviceResourceModel, _ *diag.Diagnostics) {
+func serviceToState(_ context.Context, svc *foundrydb.Service, model *serviceResourceModel, _ *diag.Diagnostics) {
 	model.ID = types.StringValue(svc.ID)
 	model.Name = types.StringValue(svc.Name)
-	model.DatabaseType = types.StringValue(svc.DatabaseType)
+	model.DatabaseType = types.StringValue(string(svc.DatabaseType))
 	model.Version = types.StringValue(svc.Version)
 	model.PlanName = types.StringValue(svc.PlanName)
 	model.Zone = types.StringValue(svc.Zone)
 	model.StorageSizeGB = types.Int64Value(svc.StorageSizeGB)
-	model.StorageTier = types.StringValue(svc.StorageTier)
-	model.Status = types.StringValue(svc.Status)
+	model.StorageTier = types.StringValue(string(svc.StorageTier))
+	model.Status = types.StringValue(string(svc.Status))
 	model.CreatedAt = types.StringValue(svc.CreatedAt)
 	// organization_id is not returned by the API; preserve whatever was set in state/plan.
 
