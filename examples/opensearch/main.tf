@@ -12,11 +12,11 @@ provider "foundrydb" {
   password = "admin"
 }
 
-# Provision an OpenSearch 2.19 cluster on a tier-4 plan (4 CPU, 8 GB RAM)
+# Provision an OpenSearch 2 cluster on a tier-4 plan (4 CPU, 8 GB RAM)
 resource "foundrydb_service" "opensearch" {
   name            = "prod-opensearch"
   database_type   = "opensearch"
-  version         = "2.19"
+  version         = "2"
   plan_name       = "tier-4"
   zone            = "se-sto1"
   storage_size_gb = 200

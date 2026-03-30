@@ -75,7 +75,7 @@ func (r *serviceResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"version": schema.StringAttribute{
-				MarkdownDescription: "Database engine version. Examples: `17` (PostgreSQL), `8.4` (MySQL), `8.0` (MongoDB), `8.1` (Valkey), `3.9` (Kafka), `2.19` (OpenSearch), `4.8` (MSSQL).",
+				MarkdownDescription: "Database engine version. Examples: `17` (PostgreSQL), `8.4` (MySQL), `8.0` (MongoDB), `8.1` (Valkey), `3.9` (Kafka), `2` (OpenSearch), `4.8` (MSSQL).",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
