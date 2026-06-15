@@ -6,6 +6,8 @@ github.com/anorph/foundrydb-sdk-go v0.0.0-20260330192455-5869d81722c4 h1:Uva1fjs
 github.com/anorph/foundrydb-sdk-go v0.0.0-20260330192455-5869d81722c4/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
 github.com/anorph/foundrydb-sdk-go v0.0.0-20260330192943-6c36e0af2024 h1:kY6RZK37M0l5vQIZbCB3WC6nN7HuGmBoLz84LY6VONQ=
 github.com/anorph/foundrydb-sdk-go v0.0.0-20260330192943-6c36e0af2024/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
+github.com/anorph/foundrydb-sdk-go v0.0.0-20260615070250-13deb6089dc4 h1:lkNC6LXOSG0Qb6MId8DefCLobPl9JHW2ZRA6t8KGg+0=
+github.com/anorph/foundrydb-sdk-go v0.0.0-20260615070250-13deb6089dc4/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
 github.com/bufbuild/protocompile v0.14.1/go.mod h1:ppVdAIhbr2H8asPk6k4pY7t9zB1OU5DoEw9xY/FUi1c=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

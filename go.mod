@@ -5,7 +5,7 @@ go 1.26.1
 require github.com/hashicorp/terraform-plugin-framework v1.19.0
 
 require (
-	github.com/anorph/foundrydb-sdk-go v0.0.0-20260330192943-6c36e0af2024 // indirect
+	github.com/anorph/foundrydb-sdk-go v0.0.0-20260615070250-13deb6089dc4 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
