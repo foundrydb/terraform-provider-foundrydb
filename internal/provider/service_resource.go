@@ -149,15 +149,18 @@ func (r *serviceResource) Configure(_ context.Context, req resource.ConfigureReq
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*foundrydb.Client)
-	if !ok {
+	switch v := req.ProviderData.(type) {
+	case *providerData:
+		r.client = v.client
+	case *foundrydb.Client:
+		// Accepted for backward compatibility with tests that inject a bare client.
+		r.client = v
+	default:
 		resp.Diagnostics.AddError(
 			"Unexpected resource configure type",
-			fmt.Sprintf("Expected *foundrydb.Client, got %T", req.ProviderData),
+			fmt.Sprintf("Expected *providerData, got %T", req.ProviderData),
 		)
-		return
 	}
-	r.client = c
 }
 
 func (r *serviceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

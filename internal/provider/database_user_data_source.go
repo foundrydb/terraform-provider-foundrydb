@@ -80,15 +80,17 @@ func (d *databaseUserDataSource) Configure(_ context.Context, req datasource.Con
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*foundrydb.Client)
-	if !ok {
+	switch v := req.ProviderData.(type) {
+	case *providerData:
+		d.client = v.client
+	case *foundrydb.Client:
+		d.client = v
+	default:
 		resp.Diagnostics.AddError(
 			"Unexpected data source configure type",
-			fmt.Sprintf("Expected *foundrydb.Client, got %T", req.ProviderData),
+			fmt.Sprintf("Expected *providerData, got %T", req.ProviderData),
 		)
-		return
 	}
-	d.client = c
 }
 
 func (d *databaseUserDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {

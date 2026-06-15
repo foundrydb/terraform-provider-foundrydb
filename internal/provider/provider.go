@@ -26,6 +26,29 @@ type foundrydbProviderModel struct {
 	Password types.String `tfsdk:"password"`
 }
 
+// providerData bundles the SDK client together with the local edge client and
+// is passed as ResourceData and DataSourceData to every resource and data
+// source. Resources that pre-date the edge tier also accept a bare
+// *foundrydb.Client for backward compatibility with existing unit tests.
+type providerData struct {
+	client     *foundrydb.Client
+	edgeClient *edgeClient
+}
+
+// NewProviderDataForTest constructs a providerData from explicit credentials.
+// Intended for use in package-external unit tests only.
+func NewProviderDataForTest(apiURL, username, password string) *providerData {
+	c := foundrydb.New(foundrydb.Config{
+		APIURL:   apiURL,
+		Username: username,
+		Password: password,
+	})
+	return &providerData{
+		client:     c,
+		edgeClient: newEdgeClient(apiURL, username, password),
+	}
+}
+
 // New returns a provider factory function.
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
@@ -72,19 +95,29 @@ func (p *foundrydbProvider) Configure(ctx context.Context, req provider.Configur
 		apiURL = config.APIURL.ValueString()
 	}
 
-	c := foundrydb.New(foundrydb.Config{
-		APIURL:   apiURL,
-		Username: config.Username.ValueString(),
-		Password: config.Password.ValueString(),
-	})
-	resp.DataSourceData = c
-	resp.ResourceData = c
+	username := config.Username.ValueString()
+	password := config.Password.ValueString()
+
+	pd := &providerData{
+		client: foundrydb.New(foundrydb.Config{
+			APIURL:   apiURL,
+			Username: username,
+			Password: password,
+		}),
+		edgeClient: newEdgeClient(apiURL, username, password),
+	}
+	resp.DataSourceData = pd
+	resp.ResourceData = pd
 }
 
 func (p *foundrydbProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewServiceResource,
 		NewAppServiceAuthResource,
+		NewAppJobResource,
+		NewQueueResource,
+		NewEdgeDomainResource,
+		NewAppEdgeSettingsResource,
 	}
 }
 

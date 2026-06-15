@@ -17,7 +17,7 @@ import (
 // serviceResponse is a convenience helper to build a minimal API JSON response.
 func serviceResponse(id, name, dbType, version, status string) map[string]interface{} {
 	return map[string]interface{}{
-		"uuid":            id,
+		"id":              id,
 		"name":            name,
 		"database_type":   dbType,
 		"version":         version,

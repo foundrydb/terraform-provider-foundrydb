@@ -101,7 +101,7 @@ func buildStateWithAttrs(t *testing.T, schema resourceschema.Schema, overrides m
 // svcRunning returns a Service JSON body with status=running.
 func svcRunning(id, name string) []byte {
 	svc := map[string]interface{}{
-		"uuid":            id,
+		"id":              id,
 		"name":            name,
 		"database_type":   "postgresql",
 		"version":         "17",
@@ -577,7 +577,7 @@ func TestUnitCRUD_ServiceToState_allowedCIDRs(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		svc := map[string]interface{}{
-			"uuid":            svcID,
+			"id":              svcID,
 			"name":            "pg-cidr",
 			"database_type":   "postgresql",
 			"version":         "17",
@@ -958,7 +958,7 @@ func TestUnitCRUD_Create_withAllowedCIDRs(t *testing.T) {
 			var reqBody map[string]interface{}
 			_ = json.NewDecoder(r.Body).Decode(&reqBody)
 			svc := map[string]interface{}{
-				"uuid":            svcID,
+				"id":              svcID,
 				"name":            svcName,
 				"database_type":   "postgresql",
 				"version":         "17",
@@ -983,7 +983,7 @@ func TestUnitCRUD_Create_withAllowedCIDRs(t *testing.T) {
 				status = "running"
 			}
 			svc := map[string]interface{}{
-				"uuid":            svcID,
+				"id":              svcID,
 				"name":            svcName,
 				"database_type":   "postgresql",
 				"version":         "17",
@@ -1061,7 +1061,7 @@ func TestUnitCRUD_Update_withAllowedCIDRs(t *testing.T) {
 			patchReceived.Store(true)
 			patchBody, _ = io.ReadAll(r.Body)
 			svc := map[string]interface{}{
-				"uuid":            svcID,
+				"id":              svcID,
 				"name":            "pg-cidr-update",
 				"database_type":   "postgresql",
 				"version":         "17",

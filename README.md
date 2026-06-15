@@ -136,6 +136,100 @@ resource "foundrydb_service" "postgres" {
 
 Only `name` and `allowed_cidrs` can be updated without recreating the service. All other arguments force replacement.
 
+### `foundrydb_app_job`
+
+Creates and manages a job definition on a FoundryDB app service. A job is a container run (image, command, and environment layered over the app's own configuration) with an optional cron schedule. Jobs without a schedule run only on explicit invocation via the platform API.
+
+#### Example
+
+```hcl
+resource "foundrydb_app_job" "nightly_cleanup" {
+  app_service_id = foundrydb_service.app.id
+  name           = "nightly-cleanup"
+  schedule_cron  = "0 2 * * *"
+  timezone       = "Europe/Stockholm"
+  enabled        = true
+
+  image_ref = "registry.example.com/tools:cleanup-v2"
+  command   = ["/app/cleanup", "--older-than=30d"]
+
+  env = {
+    CLEANUP_DRY_RUN = "false"
+    LOG_LEVEL       = "info"
+  }
+
+  max_retries           = 2
+  retry_backoff_seconds = 60
+  max_runtime_seconds   = 1800
+  concurrency_cap       = 1
+}
+```
+
+#### Arguments
+
+| Argument | Type | Required | Forces Replace | Description |
+|----------|------|----------|----------------|-------------|
+| `app_service_id` | string | Yes | Yes | UUID of the app service that owns this job. |
+| `name` | string | Yes | Yes | Unique name for the job within the app service. |
+| `schedule_cron` | string | No | No | Five-field cron expression (minute granularity; descriptors such as `@daily` accepted) evaluated in `timezone`. Omit for an unscheduled job. Removing this field from config sends `clear_schedule` to the API. |
+| `timezone` | string | No | No | IANA timezone name for cron evaluation (e.g. `UTC`, `Europe/Stockholm`). Default: `UTC`. |
+| `enabled` | bool | No | No | Whether the schedule is active. Disabled jobs still run on explicit invocation. Default: `true`. |
+| `image_ref` | string | No | No | Container image reference override (e.g. `registry.example.com/tools:latest`). Omit to inherit the app's image. Removing this field sends `clear_image_ref` to the API. |
+| `command` | list(string) | No | No | Container argv override in exec form. Omit to use the image default. |
+| `env` | map(string) | No | No | Environment variables layered over the app's environment at dispatch time. Job keys override app keys. |
+| `max_retries` | number | No | No | Retry count after failure before the invocation is permanently failed. Default: `0`. |
+| `retry_backoff_seconds` | number | No | No | Minimum delay in seconds between retry attempts. Default: `0`. |
+| `max_runtime_seconds` | number | No | No | Maximum wall-clock time before the platform terminates the invocation. Default: `3600`. |
+| `concurrency_cap` | number | No | No | Maximum simultaneous invocations. A new invocation exceeding this cap is rejected. Default: `1`. |
+
+#### Computed Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `id` | UUID of the job. |
+
+#### In-place Updates
+
+All arguments except `app_service_id` and `name` can be updated without recreating the job. Removing `schedule_cron` sends `clear_schedule`; removing `image_ref` sends `clear_image_ref`.
+
+---
+
+### `foundrydb_queue`
+
+Creates and manages a message queue on a FoundryDB PostgreSQL managed service. Queue state (messages) lives in the customer's database, transactional with their data. After creation, the provider polls until the queue reaches `Active` status. All arguments are immutable after creation; any change destroys and recreates the queue.
+
+#### Example
+
+```hcl
+resource "foundrydb_queue" "tasks" {
+  service_id                 = foundrydb_service.pg.id
+  name                       = "tasks"
+  visibility_timeout_seconds = 30
+  max_attempts               = 5
+  dlq_enabled                = true
+}
+```
+
+#### Arguments
+
+| Argument | Type | Required | Forces Replace | Description |
+|----------|------|----------|----------------|-------------|
+| `service_id` | string | Yes | Yes | UUID of the PostgreSQL managed service that hosts this queue. |
+| `name` | string | Yes | Yes | Unique name for the queue within the service. |
+| `visibility_timeout_seconds` | number | No | Yes | Redelivery horizon in seconds: how long a claimed message stays invisible before a crashed consumer's claim expires. Default: `30`. |
+| `max_attempts` | number | No | Yes | Maximum delivery attempts before a message is dropped or dead-lettered. Default: `5`. |
+| `dlq_enabled` | bool | No | Yes | Whether exhausted messages are moved to a dead-letter queue instead of being dropped. Default: `true`. |
+
+#### Computed Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `id` | UUID of the queue. |
+| `status` | Current lifecycle status: `Pending`, `Provisioning`, `Active`, `Deprovisioning`, or `Failed`. |
+| `database_name` | Name of the customer database where queue schema objects are created. |
+
+---
+
 ## Data Sources
 
 ### `foundrydb_database_user`
@@ -353,6 +447,72 @@ resource "foundrydb_service" "org_postgres" {
 
   # All API calls for this resource will include X-Active-Org-ID header.
   organization_id = data.foundrydb_organizations.all.organizations[0].id
+}
+```
+
+### App Job
+
+```hcl
+resource "foundrydb_service" "app" {
+  name            = "prod-app"
+  database_type   = "app"
+  plan_name       = "tier-2"
+  zone            = "se-sto1"
+  storage_size_gb = 20
+  storage_tier    = "maxiops"
+  allowed_cidrs   = ["0.0.0.0/0"]
+}
+
+resource "foundrydb_app_job" "nightly_cleanup" {
+  app_service_id = foundrydb_service.app.id
+  name           = "nightly-cleanup"
+  schedule_cron  = "0 2 * * *"
+  timezone       = "Europe/Stockholm"
+  enabled        = true
+  image_ref      = "registry.example.com/tools:cleanup-v2"
+  command        = ["/app/cleanup", "--older-than=30d"]
+  env = {
+    LOG_LEVEL = "info"
+  }
+  max_retries          = 2
+  retry_backoff_seconds = 60
+  max_runtime_seconds  = 1800
+  concurrency_cap      = 1
+}
+
+output "cleanup_job_id" {
+  value = foundrydb_app_job.nightly_cleanup.id
+}
+```
+
+### Queue
+
+```hcl
+resource "foundrydb_service" "pg" {
+  name            = "prod-pg"
+  database_type   = "postgresql"
+  version         = "17"
+  plan_name       = "tier-2"
+  zone            = "se-sto1"
+  storage_size_gb = 50
+  storage_tier    = "maxiops"
+  allowed_cidrs   = ["0.0.0.0/0"]
+}
+
+resource "foundrydb_queue" "tasks" {
+  service_id                 = foundrydb_service.pg.id
+  name                       = "tasks"
+  visibility_timeout_seconds = 30
+  max_attempts               = 5
+  dlq_enabled                = true
+}
+
+output "tasks_queue_status" {
+  value = foundrydb_queue.tasks.status
+}
+
+output "tasks_queue_database" {
+  value = foundrydb_queue.tasks.database_name
 }
 ```
 
