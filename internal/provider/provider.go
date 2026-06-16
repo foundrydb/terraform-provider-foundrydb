@@ -113,11 +113,14 @@ func (p *foundrydbProvider) Configure(ctx context.Context, req provider.Configur
 func (p *foundrydbProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewServiceResource,
+		NewAppServiceResource,
 		NewAppServiceAuthResource,
 		NewAppJobResource,
 		NewQueueResource,
 		NewEdgeDomainResource,
 		NewAppEdgeSettingsResource,
+		NewWebhookResource,
+		NewDataPipelineResource,
 	}
 }
 
