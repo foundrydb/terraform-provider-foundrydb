@@ -1,5 +1,3 @@
-github.com/anorph/foundrydb-sdk-go v0.6.0 h1:XY8sIX3ofuftgyKqkdudS4xiW7e4VO78HcqV+BVD3q8=
-github.com/anorph/foundrydb-sdk-go v0.6.0/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
 github.com/anorph/foundrydb-sdk-go v0.7.0 h1:e/nLThozH7A79rtHDmkEGHOvoDOH92HyjTaglz06I1k=
 github.com/anorph/foundrydb-sdk-go v0.7.0/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
