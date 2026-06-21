@@ -121,6 +121,8 @@ func (p *foundrydbProvider) Resources(_ context.Context) []func() resource.Resou
 		NewAppEdgeSettingsResource,
 		NewWebhookResource,
 		NewDataPipelineResource,
+		NewStackResource,
+		NewAttachmentResource,
 	}
 }
 
@@ -128,5 +130,6 @@ func (p *foundrydbProvider) DataSources(_ context.Context) []func() datasource.D
 	return []func() datasource.DataSource{
 		NewDatabaseUserDataSource,
 		NewOrganizationsDataSource,
+		NewStackTemplatesDataSource,
 	}
 }

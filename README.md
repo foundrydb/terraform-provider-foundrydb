@@ -230,6 +230,52 @@ resource "foundrydb_queue" "tasks" {
 
 ---
 
+### `foundrydb_stack`
+
+Launches and manages a FoundryDB vertical-starter stack. A stack provisions a set of platform primitives (database, file storage, inference, app service) from a first-party catalog template in a single atomic operation. After creation, the provider waits up to 20 minutes for the stack to reach `Running` status.
+
+All input fields are immutable after launch; any change destroys and recreates the stack. Use the `foundrydb_stack_templates` data source to discover available templates and current prices.
+
+#### Example
+
+```hcl
+data "foundrydb_stack_templates" "catalog" {}
+
+locals {
+  rag_template = one([
+    for t in data.foundrydb_stack_templates.catalog.templates :
+    t if t.name == "rag-chatbot"
+  ])
+}
+
+resource "foundrydb_stack" "rag" {
+  name                  = "prod-rag"
+  template_name         = "rag-chatbot"
+  accepted_monthly_cost = local.rag_template.monthly_total
+}
+```
+
+#### Arguments
+
+| Argument | Type | Required | Forces Replace | Description |
+|----------|------|----------|----------------|-------------|
+| `name` | string | Yes | Yes | Human-readable name for this stack instance. |
+| `template_name` | string | Yes | Yes | Catalog template to launch (e.g. `rag-chatbot`). Use `foundrydb_stack_templates` to list available names. |
+| `organization_id` | string | No | Yes | Organization UUID to scope the stack and its inference key to. Defaults to the caller's primary billing organization. |
+| `accepted_monthly_cost` | number | Yes | Yes | Estimated monthly cost in USD that the operator explicitly accepted. Read `monthly_total` from `foundrydb_stack_templates` and pass it here. Launch is rejected if the platform's fresh estimate differs by more than $0.01. |
+
+#### Computed Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `id` | UUID of the stack. |
+| `status` | Current lifecycle status (e.g. `Running`, `Provisioning`, `Failed`). |
+| `endpoint_url` | Public URL of the stack's primary application endpoint. Populated once `Running`. |
+| `estimated_monthly_cost` | Actual estimated monthly cost in USD as recorded at launch time. |
+| `resources` | List of child resources. Each item exposes `symbolic_name`, `kind`, `status`, and `service_id`. |
+
+---
+
 ## Data Sources
 
 ### `foundrydb_database_user`
@@ -292,6 +338,36 @@ The data source exposes an `organizations` list. Each entry contains:
 | `slug` | URL-friendly slug. |
 | `role` | The authenticated user's role (e.g. `owner`, `member`). |
 | `created_at` | RFC3339 creation timestamp. |
+
+### `foundrydb_stack_templates`
+
+Lists all available first-party stack templates from the FoundryDB catalog. Each template includes a fresh cost preview. Use the returned `name` and `monthly_total` values to populate a `foundrydb_stack` resource.
+
+#### Example
+
+```hcl
+data "foundrydb_stack_templates" "catalog" {}
+
+output "template_costs" {
+  description = "Available stack templates and their estimated monthly costs"
+  value = {
+    for t in data.foundrydb_stack_templates.catalog.templates :
+    t.name => t.monthly_total
+  }
+}
+```
+
+#### Computed Attributes
+
+The data source exposes a `templates` list. Each entry contains:
+
+| Attribute | Description |
+|-----------|-------------|
+| `name` | Machine-readable template name (e.g. `rag-chatbot`). Pass to `foundrydb_stack.template_name`. |
+| `display_name` | Human-readable template name (e.g. `Launch a RAG chatbot`). |
+| `description` | Short description of what this template provisions. |
+| `version` | Semantic version of the template descriptor. |
+| `monthly_total` | Estimated total monthly cost in USD. Pass to `foundrydb_stack.accepted_monthly_cost`. |
 
 ## Complete Examples
 
@@ -516,12 +592,50 @@ output "tasks_queue_database" {
 }
 ```
 
+### Stack (RAG chatbot)
+
+```hcl
+# Discover templates and their current prices.
+data "foundrydb_stack_templates" "catalog" {}
+
+locals {
+  rag_template = one([
+    for t in data.foundrydb_stack_templates.catalog.templates :
+    t if t.name == "rag-chatbot"
+  ])
+}
+
+# Launch the stack. accepted_monthly_cost is read from the catalog so the
+# configuration stays in sync with platform pricing automatically.
+resource "foundrydb_stack" "rag" {
+  name                  = "prod-rag"
+  template_name         = "rag-chatbot"
+  accepted_monthly_cost = local.rag_template.monthly_total
+}
+
+output "rag_endpoint" {
+  description = "Chat UI URL (available once Running)"
+  value       = foundrydb_stack.rag.endpoint_url
+}
+
+output "rag_resources" {
+  description = "Child platform resources provisioned by the stack"
+  value       = foundrydb_stack.rag.resources
+}
+```
+
 ## Import
 
 Existing services can be imported using their UUID:
 
 ```bash
 terraform import foundrydb_service.postgres <service-uuid>
+```
+
+Existing stacks can be imported using their UUID:
+
+```bash
+terraform import foundrydb_stack.rag <stack-uuid>
 ```
 
 ## License
