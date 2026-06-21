@@ -37,6 +37,7 @@ type stackResourceModel struct {
 	ID                   types.String  `tfsdk:"id"`
 	Name                 types.String  `tfsdk:"name"`
 	TemplateName         types.String  `tfsdk:"template_name"`
+	TemplateID           types.String  `tfsdk:"template_id"`
 	OrganizationID       types.String  `tfsdk:"organization_id"`
 	AcceptedMonthlyCost  types.Float64 `tfsdk:"accepted_monthly_cost"`
 	Status               types.String  `tfsdk:"status"`
@@ -89,8 +90,15 @@ func (r *stackResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"template_name": schema.StringAttribute{
-				MarkdownDescription: "Name of the first-party catalog template to launch (e.g. `rag-chatbot`). Use the `foundrydb_stack_templates` data source to list available templates. Changing this value destroys and recreates the resource.",
-				Required:            true,
+				MarkdownDescription: "Name of the first-party catalog template to launch (e.g. `rag-chatbot`). Use the `foundrydb_stack_templates` data source to list available templates. Exactly one of `template_name` or `template_id` must be set. Changing this value destroys and recreates the resource.",
+				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"template_id": schema.StringAttribute{
+				MarkdownDescription: "UUID of a customer-authored marketplace template to launch. The template must be visible to the caller (publicly published, or `org_shared`/`private` within the caller's organization). Exactly one of `template_name` or `template_id` must be set. Manage the template itself with `foundrydb_stack_template`. Changing this value destroys and recreates the resource.",
+				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -179,11 +187,34 @@ func (r *stackResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
+	// Validate that exactly one of template_name / template_id is set.
+	hasTemplateName := !plan.TemplateName.IsNull() && !plan.TemplateName.IsUnknown() && plan.TemplateName.ValueString() != ""
+	hasTemplateID := !plan.TemplateID.IsNull() && !plan.TemplateID.IsUnknown() && plan.TemplateID.ValueString() != ""
+	if !hasTemplateName && !hasTemplateID {
+		resp.Diagnostics.AddError(
+			"Missing template selector",
+			"Exactly one of template_name or template_id must be set.",
+		)
+		return
+	}
+	if hasTemplateName && hasTemplateID {
+		resp.Diagnostics.AddError(
+			"Conflicting template selectors",
+			"Only one of template_name or template_id may be set, not both.",
+		)
+		return
+	}
+
 	cost := plan.AcceptedMonthlyCost.ValueFloat64()
 	launchReq := foundrydb.StackLaunchRequest{
 		Name:                plan.Name.ValueString(),
-		TemplateName:        plan.TemplateName.ValueString(),
 		AcceptedMonthlyCost: &cost,
+	}
+	if hasTemplateName {
+		launchReq.TemplateName = plan.TemplateName.ValueString()
+	}
+	if hasTemplateID {
+		launchReq.TemplateID = plan.TemplateID.ValueString()
 	}
 	if !plan.OrganizationID.IsNull() && !plan.OrganizationID.IsUnknown() {
 		launchReq.OrganizationID = plan.OrganizationID.ValueString()
@@ -305,10 +336,20 @@ func (r *stackResource) ImportState(ctx context.Context, req resource.ImportStat
 func stackToState(stack *foundrydb.Stack, model *stackResourceModel, addError func(summary, detail string)) {
 	model.ID = types.StringValue(stack.ID)
 	model.Name = types.StringValue(stack.Name)
-	model.TemplateName = types.StringValue(stack.TemplateName)
 	model.Status = types.StringValue(stack.Status)
 	model.EndpointURL = types.StringValue(stack.EndpointURL)
 	model.EstimatedMonthlyCost = types.Float64Value(stack.EstimatedMonthlyCost)
+
+	// Populate the template selector fields from the API response. The API
+	// echoes TemplateName for first-party stacks and SourceTemplateID for
+	// marketplace stacks. Preserve whichever was in state for the other field
+	// so plan/state stays consistent.
+	if stack.TemplateName != "" {
+		model.TemplateName = types.StringValue(stack.TemplateName)
+	}
+	if stack.SourceTemplateID != "" {
+		model.TemplateID = types.StringValue(stack.SourceTemplateID)
+	}
 
 	// organization_id is not returned by the API; preserve whatever was set in state/plan.
 

@@ -67,3 +67,13 @@ output "stack_resources" {
   description = "Child platform resources provisioned by the stack"
   value       = foundrydb_stack.rag.resources
 }
+
+# Alternatively, launch from a customer-authored marketplace template.
+# Replace the UUID with the ID of a foundrydb_stack_template resource or
+# a template discovered via the FoundryDB API/CLI.
+#
+# resource "foundrydb_stack" "marketplace_instance" {
+#   name                  = "team-analytics"
+#   template_id           = "00000000-0000-0000-0000-000000000000"
+#   accepted_monthly_cost = 50.00
+# }

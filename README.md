@@ -232,11 +232,11 @@ resource "foundrydb_queue" "tasks" {
 
 ### `foundrydb_stack`
 
-Launches and manages a FoundryDB vertical-starter stack. A stack provisions a set of platform primitives (database, file storage, inference, app service) from a first-party catalog template in a single atomic operation. After creation, the provider waits up to 20 minutes for the stack to reach `Running` status.
+Launches and manages a FoundryDB vertical-starter stack. A stack provisions a set of platform primitives (database, file storage, inference, app service) from a first-party catalog template or a customer-authored marketplace template in a single atomic operation. After creation, the provider waits up to 20 minutes for the stack to reach `Running` status.
 
-All input fields are immutable after launch; any change destroys and recreates the stack. Use the `foundrydb_stack_templates` data source to discover available templates and current prices.
+All input fields are immutable after launch; any change destroys and recreates the stack. Use the `foundrydb_stack_templates` data source to discover available first-party templates and current prices.
 
-#### Example
+#### Example (first-party template)
 
 ```hcl
 data "foundrydb_stack_templates" "catalog" {}
@@ -255,14 +255,25 @@ resource "foundrydb_stack" "rag" {
 }
 ```
 
+#### Example (marketplace template)
+
+```hcl
+resource "foundrydb_stack" "analytics" {
+  name                  = "team-analytics"
+  template_id           = foundrydb_stack_template.custom.id
+  accepted_monthly_cost = 50.00
+}
+```
+
 #### Arguments
 
 | Argument | Type | Required | Forces Replace | Description |
 |----------|------|----------|----------------|-------------|
 | `name` | string | Yes | Yes | Human-readable name for this stack instance. |
-| `template_name` | string | Yes | Yes | Catalog template to launch (e.g. `rag-chatbot`). Use `foundrydb_stack_templates` to list available names. |
+| `template_name` | string | No | Yes | First-party catalog template to launch (e.g. `rag-chatbot`). Use `foundrydb_stack_templates` to list available names. Exactly one of `template_name` or `template_id` must be set. |
+| `template_id` | string | No | Yes | UUID of a customer-authored marketplace template to launch. Manage the template with `foundrydb_stack_template`. Exactly one of `template_name` or `template_id` must be set. |
 | `organization_id` | string | No | Yes | Organization UUID to scope the stack and its inference key to. Defaults to the caller's primary billing organization. |
-| `accepted_monthly_cost` | number | Yes | Yes | Estimated monthly cost in USD that the operator explicitly accepted. Read `monthly_total` from `foundrydb_stack_templates` and pass it here. Launch is rejected if the platform's fresh estimate differs by more than $0.01. |
+| `accepted_monthly_cost` | number | Yes | Yes | Estimated monthly cost in USD that the operator explicitly accepted. Read `monthly_total` from `foundrydb_stack_templates` (or from `fdb stack preview --template-id <id>` for marketplace templates) and pass it here. Launch is rejected if the platform's fresh estimate differs by more than $0.01. |
 
 #### Computed Attributes
 
@@ -273,6 +284,83 @@ resource "foundrydb_stack" "rag" {
 | `endpoint_url` | Public URL of the stack's primary application endpoint. Populated once `Running`. |
 | `estimated_monthly_cost` | Actual estimated monthly cost in USD as recorded at launch time. |
 | `resources` | List of child resources. Each item exposes `symbolic_name`, `kind`, `status`, and `service_id`. |
+
+---
+
+### `foundrydb_stack_template`
+
+Creates and manages a customer-authored stack template in the FoundryDB marketplace. A template holds a `StackDescriptor` (JSON) that declares which platform primitives to compose (databases, file services, app services, inference keys) and how they depend on each other. Templates start in `draft` status and are only visible to the owning organization. Set `visibility` to `org_shared` or `public` and set `publish = true` to share the template.
+
+Published templates are immutable on the platform: editing a published template requires unpublishing it first (via the API or CLI) or creating a new version. This provider allows updating `display_name`, `description`, `version`, `visibility`, and `descriptor` while the template is in `draft`, `rejected`, or `unpublished` state. The `name` argument forces resource replacement.
+
+#### Example
+
+```hcl
+resource "foundrydb_stack_template" "analytics" {
+  name         = "custom-analytics-stack"
+  display_name = "Custom Analytics Stack"
+  description  = "PostgreSQL + analytics app service for internal dashboards."
+  version      = "1.0.0"
+  visibility   = "org_shared"
+
+  descriptor = jsonencode({
+    apiVersion  = "stacks/v1"
+    name        = "custom-analytics-stack"
+    displayName = "Custom Analytics Stack"
+    version     = "1.0.0"
+    resources = [
+      {
+        name = "db"
+        kind = "database"
+        spec = {
+          database_type   = "postgresql"
+          version         = "17"
+          plan_name       = "tier-2"
+          zone            = "se-sto1"
+          storage_size_gb = 50
+          storage_tier    = "maxiops"
+        }
+      }
+    ]
+  })
+
+  publish = true
+}
+
+output "template_id" {
+  value = foundrydb_stack_template.analytics.id
+}
+
+output "publication_status" {
+  value = foundrydb_stack_template.analytics.publication_status
+}
+```
+
+#### Arguments
+
+| Argument | Type | Required | Forces Replace | Description |
+|----------|------|----------|----------------|-------------|
+| `name` | string | Yes | Yes | Unique slug-style identifier for the template (e.g. `my-rag-stack`). Must be unique within the owning organization. |
+| `display_name` | string | No | No | Human-readable name shown in the marketplace catalog. |
+| `description` | string | No | No | Short description of what this template provisions. |
+| `version` | string | No | No | Semantic version of the descriptor (e.g. `1.0.0`). Defaults to `1.0.0`. |
+| `visibility` | string | No | No | Sharing scope: `private` (owning org only), `org_shared` (all org members), or `public` (marketplace, pending review). Default: `private`. |
+| `descriptor` | string | Yes | No | JSON-encoded `StackDescriptor` validated by the platform. Use `jsonencode()` to compose it from a Terraform map or supply a raw string from `file()`. |
+| `publish` | bool | No | No | When `true`, calls `PublishStackTemplate` after create (or after the update that first toggles this to `true`). For `org_shared`, publishes immediately; for `public`, submits to the moderation queue. Default: `false`. |
+
+#### Computed Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `id` | UUID of the custom template. |
+| `publication_status` | Moderation lifecycle: `draft`, `submitted`, `approved`, `published`, `rejected`, or `unpublished`. |
+| `organization_id` | UUID of the organization that owns this template. |
+
+#### Import
+
+```bash
+terraform import foundrydb_stack_template.analytics <template-uuid>
+```
 
 ---
 
@@ -592,7 +680,7 @@ output "tasks_queue_database" {
 }
 ```
 
-### Stack (RAG chatbot)
+### Stack (RAG chatbot, first-party template)
 
 ```hcl
 # Discover templates and their current prices.
@@ -624,6 +712,54 @@ output "rag_resources" {
 }
 ```
 
+### Stack (marketplace custom template)
+
+```hcl
+# Author and publish a custom template, then launch a stack from it.
+resource "foundrydb_stack_template" "analytics" {
+  name         = "custom-analytics-stack"
+  display_name = "Custom Analytics Stack"
+  description  = "PostgreSQL + analytics app for internal dashboards."
+  version      = "1.0.0"
+  visibility   = "org_shared"
+
+  descriptor = jsonencode({
+    apiVersion  = "stacks/v1"
+    name        = "custom-analytics-stack"
+    displayName = "Custom Analytics Stack"
+    version     = "1.0.0"
+    resources = [
+      {
+        name = "db"
+        kind = "database"
+        spec = {
+          database_type   = "postgresql"
+          version         = "17"
+          plan_name       = "tier-2"
+          zone            = "se-sto1"
+          storage_size_gb = 50
+          storage_tier    = "maxiops"
+        }
+      }
+    ]
+  })
+
+  publish = true
+}
+
+resource "foundrydb_stack" "analytics" {
+  name                  = "team-analytics"
+  template_id           = foundrydb_stack_template.analytics.id
+  accepted_monthly_cost = 50.00
+
+  depends_on = [foundrydb_stack_template.analytics]
+}
+
+output "analytics_endpoint" {
+  value = foundrydb_stack.analytics.endpoint_url
+}
+```
+
 ## Import
 
 Existing services can be imported using their UUID:
@@ -636,6 +772,12 @@ Existing stacks can be imported using their UUID:
 
 ```bash
 terraform import foundrydb_stack.rag <stack-uuid>
+```
+
+Existing custom templates can be imported using their UUID:
+
+```bash
+terraform import foundrydb_stack_template.analytics <template-uuid>
 ```
 
 ## License

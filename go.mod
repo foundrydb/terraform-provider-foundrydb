@@ -3,7 +3,7 @@ module github.com/anorph/terraform-provider-foundrydb
 go 1.26.1
 
 require (
-	github.com/anorph/foundrydb-sdk-go v0.7.0
+	github.com/anorph/foundrydb-sdk-go v0.8.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 )

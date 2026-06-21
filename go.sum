@@ -1,5 +1,7 @@
 github.com/anorph/foundrydb-sdk-go v0.7.0 h1:e/nLThozH7A79rtHDmkEGHOvoDOH92HyjTaglz06I1k=
 github.com/anorph/foundrydb-sdk-go v0.7.0/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
+github.com/anorph/foundrydb-sdk-go v0.8.0 h1:hTC2PWHcQxoV3CLDtFuc3IdAWPtyWHb8ps3mSncL/3o=
+github.com/anorph/foundrydb-sdk-go v0.8.0/go.mod h1:7BUPjkxnQT72FfoJ+S+X5tAPgLvtwplo2/wgYnIzxzo=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
 github.com/bufbuild/protocompile v0.14.1/go.mod h1:ppVdAIhbr2H8asPk6k4pY7t9zB1OU5DoEw9xY/FUi1c=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

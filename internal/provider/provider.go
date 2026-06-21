@@ -122,6 +122,7 @@ func (p *foundrydbProvider) Resources(_ context.Context) []func() resource.Resou
 		NewWebhookResource,
 		NewDataPipelineResource,
 		NewStackResource,
+		NewStackTemplateResource,
 		NewAttachmentResource,
 	}
 }
