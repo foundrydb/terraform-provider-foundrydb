@@ -73,12 +73,20 @@ func getAppEdgeSettingsSchema(t *testing.T, r resource.Resource) resourceschema.
 // appEdgeSettingsStateModel mirrors appEdgeSettingsResourceModel for state
 // decoding in tests.
 type appEdgeSettingsStateModel struct {
-	ID            types.String `tfsdk:"id"`
-	AppServiceID  types.String `tfsdk:"app_service_id"`
-	WAFMode       types.String `tfsdk:"waf_mode"`
-	CacheRules    types.List   `tfsdk:"cache_rules"`
-	RateLimit     types.List   `tfsdk:"rate_limit"`
-	ConfigVersion types.Int64  `tfsdk:"config_version"`
+	ID                types.String `tfsdk:"id"`
+	AppServiceID      types.String `tfsdk:"app_service_id"`
+	WAFMode           types.String `tfsdk:"waf_mode"`
+	CacheRules        types.List   `tfsdk:"cache_rules"`
+	RateLimit         types.List   `tfsdk:"rate_limit"`
+	JWTAuth           types.List   `tfsdk:"jwt_auth"`
+	SignedURLs        types.List   `tfsdk:"signed_urls"`
+	APIKeyAuth        types.List   `tfsdk:"api_key_auth"`
+	WAFParanoiaLevel  types.Int64  `tfsdk:"waf_paranoia_level"`
+	WAFRuleExclusions types.List   `tfsdk:"waf_rule_exclusions"`
+	DDoSProfile       types.List   `tfsdk:"ddos_profile"`
+	BotManagement     types.List   `tfsdk:"bot_management"`
+	ATOProtection     types.List   `tfsdk:"ato_protection"`
+	ConfigVersion     types.Int64  `tfsdk:"config_version"`
 }
 
 // TestUnitAppEdgeSettingsResource_Metadata verifies the resource type name.
@@ -505,22 +513,29 @@ func TestUnitAppEdgeSettingsCRUD_Create_withCacheRules(t *testing.T) {
 	res := configuredAppEdgeSettingsResource(t, srv.URL)
 	schema := getAppEdgeSettingsSchema(t, res)
 
+	cacheKeyObjType := tftypes.Object{AttributeTypes: map[string]tftypes.Type{
+		"vary_query_params": tftypes.List{ElementType: tftypes.String},
+		"vary_headers":      tftypes.List{ElementType: tftypes.String},
+		"vary_cookies":      tftypes.List{ElementType: tftypes.String},
+	}}
+	cacheRuleObjType := tftypes.Object{AttributeTypes: map[string]tftypes.Type{
+		"path_prefix":                    tftypes.String,
+		"ttl_seconds":                    tftypes.Number,
+		"stale_while_revalidate_seconds": tftypes.Number,
+		"stale_if_error_seconds":         tftypes.Number,
+		"request_collapsing":             tftypes.Bool,
+		"cache_key":                      tftypes.List{ElementType: cacheKeyObjType},
+	}}
 	cacheRulesList := tftypes.NewValue(
-		tftypes.List{ElementType: tftypes.Object{
-			AttributeTypes: map[string]tftypes.Type{
-				"path_prefix": tftypes.String,
-				"ttl_seconds": tftypes.Number,
-			},
-		}},
+		tftypes.List{ElementType: cacheRuleObjType},
 		[]tftypes.Value{
-			tftypes.NewValue(tftypes.Object{
-				AttributeTypes: map[string]tftypes.Type{
-					"path_prefix": tftypes.String,
-					"ttl_seconds": tftypes.Number,
-				},
-			}, map[string]tftypes.Value{
-				"path_prefix": tftypes.NewValue(tftypes.String, "/static"),
-				"ttl_seconds": tftypes.NewValue(tftypes.Number, mustBigFloat("3600")),
+			tftypes.NewValue(cacheRuleObjType, map[string]tftypes.Value{
+				"path_prefix":                    tftypes.NewValue(tftypes.String, "/static"),
+				"ttl_seconds":                    tftypes.NewValue(tftypes.Number, mustBigFloat("3600")),
+				"stale_while_revalidate_seconds": tftypes.NewValue(tftypes.Number, nil),
+				"stale_if_error_seconds":         tftypes.NewValue(tftypes.Number, nil),
+				"request_collapsing":             tftypes.NewValue(tftypes.Bool, nil),
+				"cache_key":                      tftypes.NewValue(tftypes.List{ElementType: cacheKeyObjType}, nil),
 			}),
 		},
 	)

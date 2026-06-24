@@ -183,10 +183,24 @@ func (c *edgeClient) DeleteDomain(ctx context.Context, appServiceID, domainID st
 	return err
 }
 
-// EdgeCacheRule caches responses under one path prefix for a fixed TTL.
+// EdgeCacheKey narrows the cache key for a cache rule to a chosen set of query
+// parameters, request headers, and cookies. An empty EdgeCacheKey caches under
+// the full request URL.
+type EdgeCacheKey struct {
+	VaryQueryParams []string `json:"vary_query_params,omitempty"`
+	VaryHeaders     []string `json:"vary_headers,omitempty"`
+	VaryCookies     []string `json:"vary_cookies,omitempty"`
+}
+
+// EdgeCacheRule caches responses under one path prefix for a fixed TTL, with
+// optional stale-serving windows, request collapsing, and a narrowed cache key.
 type EdgeCacheRule struct {
-	PathPrefix string `json:"path_prefix"`
-	TTLSeconds int    `json:"ttl_seconds"`
+	PathPrefix                  string        `json:"path_prefix"`
+	TTLSeconds                  int           `json:"ttl_seconds"`
+	StaleWhileRevalidateSeconds int           `json:"stale_while_revalidate_seconds,omitempty"`
+	StaleIfErrorSeconds         int           `json:"stale_if_error_seconds,omitempty"`
+	CacheKey                    *EdgeCacheKey `json:"cache_key,omitempty"`
+	RequestCollapsing           bool          `json:"request_collapsing,omitempty"`
 }
 
 // EdgeRateLimit is a token bucket enforced per PoP.
@@ -196,11 +210,125 @@ type EdgeRateLimit struct {
 	Key               string `json:"key"`
 }
 
+// EdgeJWTClaim is a required claim a JWT must carry to be accepted.
+type EdgeJWTClaim struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// EdgeJWTAuth validates inbound JWTs on a set of paths at the edge. It carries
+// no secret material and is echoed verbatim on the settings response.
+type EdgeJWTAuth struct {
+	Enabled             bool           `json:"enabled"`
+	Paths               []string       `json:"paths,omitempty"`
+	JWKSURL             string         `json:"jwks_url,omitempty"`
+	PublicKeys          []string       `json:"public_keys,omitempty"`
+	Issuer              string         `json:"issuer,omitempty"`
+	Audiences           []string       `json:"audiences,omitempty"`
+	RequiredClaims      []EdgeJWTClaim `json:"required_claims,omitempty"`
+	ForwardClaimsHeader string         `json:"forward_claims_header,omitempty"`
+}
+
+// EdgeSignedURLs enforces signed-URL access on a set of paths. SecretName is a
+// reference to a stored secret by name only; the secret value never crosses the
+// API. The same shape is echoed on the response (nothing secret is stored).
+type EdgeSignedURLs struct {
+	Enabled        bool     `json:"enabled"`
+	Paths          []string `json:"paths,omitempty"`
+	SecretName     string   `json:"secret_name,omitempty"`
+	TTLSeconds     int      `json:"ttl_seconds,omitempty"`
+	SignatureParam string   `json:"signature_param,omitempty"`
+	ExpiresParam   string   `json:"expires_param,omitempty"`
+}
+
+// EdgeAPIKeyRequest is one inbound API key on the settings request. Key is the
+// PLAINTEXT key the controller hashes and discards; it is write-only and never
+// echoed. RateTier is an optional per-key rate limit.
+type EdgeAPIKeyRequest struct {
+	Name     string         `json:"name"`
+	Key      string         `json:"key,omitempty"`
+	RateTier *EdgeRateLimit `json:"rate_tier,omitempty"`
+}
+
+// EdgeAPIKeyAuthRequest enables API-key authentication on a set of paths at the
+// edge. Keys carry plaintext key material that the controller hashes and
+// discards; the stored document only ever carries the resulting hashes.
+type EdgeAPIKeyAuthRequest struct {
+	Enabled     bool                `json:"enabled"`
+	Paths       []string            `json:"paths,omitempty"`
+	KeyLocation string              `json:"key_location,omitempty"`
+	KeyName     string              `json:"key_name,omitempty"`
+	Keys        []EdgeAPIKeyRequest `json:"keys,omitempty"`
+}
+
+// EdgeAPIKeyView is the non-secret view of one inbound API key returned on the
+// settings response: the key name and its optional rate tier, never the hash or
+// the plaintext.
+type EdgeAPIKeyView struct {
+	Name     string         `json:"name"`
+	RateTier *EdgeRateLimit `json:"rate_tier,omitempty"`
+}
+
+// EdgeAPIKeyAuthView is the non-secret view of the API-key authentication
+// setting returned on the settings response. It carries no key material.
+type EdgeAPIKeyAuthView struct {
+	Enabled     bool             `json:"enabled"`
+	Paths       []string         `json:"paths,omitempty"`
+	KeyLocation string           `json:"key_location,omitempty"`
+	KeyName     string           `json:"key_name,omitempty"`
+	Keys        []EdgeAPIKeyView `json:"keys,omitempty"`
+}
+
+// EdgeWAFExclusion suppresses a WAF rule for a request target. At least one of
+// RuleID or Target is set.
+type EdgeWAFExclusion struct {
+	RuleID int    `json:"rule_id,omitempty"`
+	Target string `json:"target,omitempty"`
+}
+
+// EdgeDDoSProfile sets per-IP connection and request ceilings at the edge.
+type EdgeDDoSProfile struct {
+	Enabled               bool `json:"enabled"`
+	PerIPRequestsPerSecond int `json:"per_ip_requests_per_second,omitempty"`
+	PerIPBurst            int  `json:"per_ip_burst,omitempty"`
+	PerIPConnCap         int  `json:"per_ip_conn_cap,omitempty"`
+}
+
+// EdgeBotManagement classifies and acts on automated traffic at the edge.
+type EdgeBotManagement struct {
+	Enabled            bool   `json:"enabled"`
+	Action             string `json:"action,omitempty"`
+	KnownBadBots       bool   `json:"known_bad_bots,omitempty"`
+	RateBasedHeuristic bool   `json:"rate_based_heuristic,omitempty"`
+}
+
+// EdgeATOProtection guards authentication paths against account-takeover
+// brute-forcing at the edge.
+type EdgeATOProtection struct {
+	Enabled                    bool     `json:"enabled"`
+	AuthPaths                  []string `json:"auth_paths,omitempty"`
+	FailureStatusCodes         []int    `json:"failure_status_codes,omitempty"`
+	PerIPThresholdPerMin       int      `json:"per_ip_threshold_per_min,omitempty"`
+	PerUsernameThresholdPerMin int      `json:"per_username_threshold_per_min,omitempty"`
+	UsernameField              string   `json:"username_field,omitempty"`
+	Action                     string   `json:"action,omitempty"`
+}
+
 // EdgeSettingsRequest holds the customer-tunable edge settings.
 type EdgeSettingsRequest struct {
 	CacheRules []EdgeCacheRule `json:"cache_rules,omitempty"`
 	RateLimit  *EdgeRateLimit  `json:"rate_limit,omitempty"`
 	WAFMode    *string         `json:"waf_mode,omitempty"`
+	// Access / auth.
+	JWTAuth    *EdgeJWTAuth           `json:"jwt_auth,omitempty"`
+	SignedURLs *EdgeSignedURLs        `json:"signed_urls,omitempty"`
+	APIKeyAuth *EdgeAPIKeyAuthRequest `json:"api_key_auth,omitempty"`
+	// Security hardening.
+	WAFParanoiaLevel int                `json:"waf_paranoia_level,omitempty"`
+	WAFRuleExclusions []EdgeWAFExclusion `json:"waf_rule_exclusions,omitempty"`
+	DDoSProfile      *EdgeDDoSProfile   `json:"ddos_profile,omitempty"`
+	BotManagement    *EdgeBotManagement `json:"bot_management,omitempty"`
+	ATOProtection    *EdgeATOProtection `json:"ato_protection,omitempty"`
 }
 
 // EdgeSettings is the response from an edge settings update or read.
@@ -209,6 +337,16 @@ type EdgeSettings struct {
 	RateLimit     *EdgeRateLimit  `json:"rate_limit,omitempty"`
 	WAFMode       string          `json:"waf_mode"`
 	ConfigVersion int64           `json:"config_version"`
+	// Access / auth (api_key_auth and signed_urls are non-secret views).
+	JWTAuth    *EdgeJWTAuth        `json:"jwt_auth,omitempty"`
+	SignedURLs *EdgeSignedURLs     `json:"signed_urls,omitempty"`
+	APIKeyAuth *EdgeAPIKeyAuthView `json:"api_key_auth,omitempty"`
+	// Security hardening.
+	WAFParanoiaLevel  int                `json:"waf_paranoia_level,omitempty"`
+	WAFRuleExclusions []EdgeWAFExclusion `json:"waf_rule_exclusions,omitempty"`
+	DDoSProfile       *EdgeDDoSProfile   `json:"ddos_profile,omitempty"`
+	BotManagement     *EdgeBotManagement `json:"bot_management,omitempty"`
+	ATOProtection     *EdgeATOProtection `json:"ato_protection,omitempty"`
 }
 
 // EdgeStatus is the edge overview for an app service.
